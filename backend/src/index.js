@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 const app = express();
 
 /* ------------------------
-   ✅ Manual CORS (works reliably on Vercel)
+   ✅ Force CORS Middleware (works on Vercel)
 ------------------------ */
 app.use((req, res, next) => {
   const allowedOrigins = [
@@ -18,21 +18,21 @@ app.use((req, res, next) => {
 
   const origin = req.headers.origin;
   if (allowedOrigins.includes(origin)) {
-    res.header("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Origin", origin);
   }
 
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.header("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
 
   if (req.method === "OPTIONS") {
-    return res.sendStatus(204); // ✅ handle preflight
+    return res.sendStatus(200); // ✅ respond to preflight
   }
 
   next();
 });
 
-// ✅ JSON parser
+// ✅ Parse JSON body
 app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret';
@@ -76,7 +76,7 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 /* ------------------------
-   ✅ Middleware
+   ✅ Auth Middleware
 ------------------------ */
 function authMiddleware(req, res, next) {
   const auth = req.headers.authorization;
@@ -101,9 +101,93 @@ function authMiddleware(req, res, next) {
 }
 
 /* ------------------------
-   ✅ Upgrade + Notes CRUD (unchanged)
+   ✅ Tenant Upgrade (Admin only)
 ------------------------ */
-// (Keep your tenant upgrade & notes routes as-is)
+app.post('/api/tenants/:slug/upgrade', authMiddleware, async (req, res) => {
+  const { slug } = req.params;
+  if (req.user.role !== 'admin' || req.user.tenant !== slug)
+    return res.status(403).json({ error: 'forbidden' });
+
+  await prisma.tenant.updateMany({
+    where: { slug },
+    data: { plan: 'pro' }
+  });
+
+  res.json({ success: true, slug });
+});
+
+/* ------------------------
+   ✅ Notes CRUD
+------------------------ */
+app.post('/api/notes', authMiddleware, async (req, res) => {
+  const { title, content } = req.body;
+  if (!title) return res.status(400).json({ error: 'title required' });
+
+  const tenant = await prisma.tenant.findUnique({ where: { slug: req.user.tenant } });
+  if (!tenant) return res.status(400).json({ error: 'tenant not found' });
+
+  // Free plan limit
+  if (tenant.plan === 'free') {
+    const count = await prisma.note.count({ where: { tenantId: tenant.id } });
+    if (count >= 3) return res.status(403).json({ error: 'Free plan limit reached' });
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+  const note = await prisma.note.create({
+    data: {
+      title,
+      content: content || '',
+      tenantId: tenant.id,
+      ownerId: user.id
+    }
+  });
+
+  res.status(201).json(note);
+});
+
+app.get('/api/notes', authMiddleware, async (req, res) => {
+  const tenant = await prisma.tenant.findUnique({ where: { slug: req.user.tenant } });
+  const notes = await prisma.note.findMany({
+    where: { tenantId: tenant.id },
+    include: { owner: { select: { id: true, email: true } } },
+    orderBy: { createdAt: 'desc' }
+  });
+  res.json(notes);
+});
+
+app.get('/api/notes/:id', authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const tenant = await prisma.tenant.findUnique({ where: { slug: req.user.tenant } });
+  const note = await prisma.note.findFirst({ where: { id, tenantId: tenant.id } });
+  if (!note) return res.status(404).json({ error: 'not found' });
+  res.json(note);
+});
+
+app.put('/api/notes/:id', authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const { title, content } = req.body;
+
+  const tenant = await prisma.tenant.findUnique({ where: { slug: req.user.tenant } });
+  let note = await prisma.note.findFirst({ where: { id, tenantId: tenant.id } });
+  if (!note) return res.status(404).json({ error: 'not found' });
+
+  note = await prisma.note.update({
+    where: { id },
+    data: { title: title || note.title, content: content || note.content }
+  });
+
+  res.json(note);
+});
+
+app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const tenant = await prisma.tenant.findUnique({ where: { slug: req.user.tenant } });
+  const note = await prisma.note.findFirst({ where: { id, tenantId: tenant.id } });
+  if (!note) return res.status(404).json({ error: 'not found' });
+
+  await prisma.note.delete({ where: { id } });
+  res.status(204).send();
+});
 
 /* ------------------------
    ✅ Export for Vercel
@@ -113,4 +197,5 @@ if (process.env.NODE_ENV !== 'production') {
     console.log(`✅ Server running at http://localhost:${PORT}`);
   });
 }
+
 module.exports = app;
