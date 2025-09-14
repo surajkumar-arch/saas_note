@@ -5,14 +5,14 @@ const jwt = require('jsonwebtoken');
 const prisma = require('./prisma');   // ✅ use shared prisma client
 
 const app = express();
-
+app.use(express.json())
 /* ------------------------
    ✅ CORS Middleware
 ------------------------ */
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://saas-note-ste7.vercel.app",
-   "https://saas-note-ste7.vercel.app"
+  "https://saas-note-ste7.vercel.app"
+   
 ];
 
 app.use((req, res, next) => {
