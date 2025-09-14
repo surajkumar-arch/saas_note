@@ -2,12 +2,15 @@ const { PrismaClient } = require('@prisma/client');
 
 let prisma;
 
-if (process.env.NODE_ENV === "production") {
-  prisma = new PrismaClient();
+if (process.env.NODE_ENV === 'production') {
+  prisma = new PrismaClient({
+    log: ['error'], // Optional: reduce noise
+  });
 } else {
-  // Prevent multiple instances during dev hot-reload
   if (!global.prisma) {
-    global.prisma = new PrismaClient();
+    global.prisma = new PrismaClient({
+      log: ['query', 'error', 'info', 'warn'], // Helpful for debugging locally
+    });
   }
   prisma = global.prisma;
 }

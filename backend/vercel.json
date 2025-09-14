@@ -17,6 +17,6 @@
         "Access-Control-Allow-Credentials": "true"
       }
     }
-  ]
-  
+  ],
+  "buildCommand": "npm run build"
 }
