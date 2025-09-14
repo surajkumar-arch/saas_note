@@ -17,9 +17,6 @@
         "Access-Control-Allow-Credentials": "true"
       }
     }
-  ],
-  "env": {
-    "DATABASE_URL": "@database_url",
-    "JWT_SECRET": "@jwt_secret"
-    }
+  ]
+  
 }
