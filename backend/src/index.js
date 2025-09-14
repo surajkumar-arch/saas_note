@@ -4,7 +4,7 @@ const cors = require('cors');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-
+const prisma = new PrismaClient();
 
 const app = express();
 
@@ -37,6 +37,7 @@ app.get('/api/health', (req, res) => {
 ------------------------ */
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
+  console.log("login request :",req.body);
   if (!email || !password)
     return res.status(400).json({ error: 'email and password required' });
 
