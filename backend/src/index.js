@@ -176,7 +176,6 @@ app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
 /* ------------------------
    ✅ Export for Vercel
 ------------------------ */
-module.exports = app;
 
 // Local dev server
 if (process.env.NODE_ENV !== 'production') {
@@ -184,3 +183,4 @@ if (process.env.NODE_ENV !== 'production') {
     console.log(`✅ Server running at http://localhost:${PORT}`);
     });
 }
+module.exports = app;
