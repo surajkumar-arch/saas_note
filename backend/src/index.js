@@ -11,7 +11,7 @@ const app = express();
 ------------------------ */
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://saas-note-ste7.vercel.app/"
+  "https://saas-note-ste7.vercel.app"
 ];
 
 app.use((req, res, next) => {
