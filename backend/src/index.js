@@ -15,9 +15,11 @@ app.use(
       "https://saas-note-g5rh.vercel.app"    // deployed frontend
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
   })
 );
+app.options('*', cors());
 app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret';
