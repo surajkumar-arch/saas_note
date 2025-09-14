@@ -12,8 +12,9 @@ app.use(
   cors({
     origin: [
       "http://localhost:5173",               // local frontend
-      "https://notes-frontend.vercel.app"    // deployed frontend
+      "https://saas-note-g5rh.vercel.app"    // deployed frontend
     ],
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
   })
 );
