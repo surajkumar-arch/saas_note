@@ -5,14 +5,14 @@ const jwt = require('jsonwebtoken');
 const prisma = require('./prisma');   // ✅ use shared prisma client
 
 const app = express();
-app.use(express.json())
+app.use(express.json());
+
 /* ------------------------
    ✅ CORS Middleware
 ------------------------ */
 const allowedOrigins = [
   "http://localhost:5173",
   "https://saas-note-ste7.vercel.app"
-   
 ];
 
 app.use((req, res, next) => {
@@ -30,7 +30,14 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
+/* ------------------------
+   ✅ DB Connection Test
+------------------------ */
+prisma.$connect()
+  .then(() => console.log("✅ DB Connected successfully"))
+  .catch((err) => {
+    console.error("❌ DB Connection failed:", err.message);
+  });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret';
 const PORT = process.env.PORT || 4000;
@@ -48,13 +55,21 @@ app.get('/api/health', (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password)
+    if (!email || !password) {
       return res.status(400).json({ error: 'email and password required' });
+    }
 
-    const user = await prisma.user.findUnique({
-      where: { email },
-      include: { tenant: true }
-    });
+    let user;
+    try {
+      user = await prisma.user.findUnique({
+        where: { email },
+        include: { tenant: true }
+      });
+    } catch (dbErr) {
+      console.error("❌ Prisma DB error:", dbErr.message);
+      return res.status(500).json({ error: "database connection failed" });
+    }
+
     if (!user) return res.status(401).json({ error: 'invalid credentials' });
 
     const ok = await bcrypt.compare(password, user.passwordHash);
@@ -66,13 +81,13 @@ app.post('/api/auth/login', async (req, res) => {
       { expiresIn: '8h' }
     );
 
-    res.json({
+    return res.json({
       token,
       user: { id: user.id, email: user.email, role: user.role, tenant: user.tenant.slug }
     });
   } catch (err) {
-    console.error("Login error:", err);
-    res.status(500).json({ error: "server error" });
+    console.error("❌ Login error:", err);
+    res.status(500).json({ error: "server error", details: err.message });
   }
 });
 
@@ -97,9 +112,19 @@ function authMiddleware(req, res, next) {
 }
 
 /* ------------------------
-   ✅ Other Routes (Upgrade, Notes CRUD)
+   ✅ Example Protected Route (Notes)
 ------------------------ */
-// ... (same as your existing code, just using prisma = require('./prisma'))
+app.get('/api/notes', authMiddleware, async (req, res) => {
+  try {
+    const notes = await prisma.note.findMany({
+      where: { tenantId: req.user.tenant }
+    });
+    res.json(notes);
+  } catch (err) {
+    console.error("❌ Notes error:", err.message);
+    res.status(500).json({ error: "server error" });
+  }
+});
 
 /* ------------------------
    ✅ Export for Vercel
