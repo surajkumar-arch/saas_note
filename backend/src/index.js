@@ -8,14 +8,14 @@ const prisma = new PrismaClient();
 const app = express();
 
 /* ------------------------
-   ✅ Force CORS Middleware (works on Vercel)
+   ✅ CORS Middleware + Preflight
 ------------------------ */
-app.use((req, res, next) => {
-  const allowedOrigins = [
-    "http://localhost:5173",                 // local frontend
-    "https://saas-note-g5rh.vercel.app"      // deployed frontend
-  ];
+const allowedOrigins = [
+  "http://localhost:5173",                // local frontend
+  "https://saas-note-g5rh.vercel.app"     // deployed frontend
+];
 
+app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (allowedOrigins.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
@@ -25,14 +25,24 @@ app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Credentials", "true");
 
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200); // ✅ respond to preflight
-  }
-
   next();
 });
 
-// ✅ Parse JSON body
+// ✅ Explicit preflight handler (fixes Vercel 500 issue)
+app.options("*", (req, res) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+
+  return res.sendStatus(200);
+});
+
+// ✅ JSON parser
 app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret';
