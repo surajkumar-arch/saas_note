@@ -108,6 +108,8 @@ function authMiddleware(req, res, next) {
 /* ------------------------
    ✅ Notes CRUD
 ------------------------ */
+
+// List notes
 app.get('/api/notes', authMiddleware, async (req, res) => {
   try {
     const notes = await prisma.note.findMany({
@@ -120,6 +122,28 @@ app.get('/api/notes', authMiddleware, async (req, res) => {
   }
 });
 
+// Get single note by ID
+app.get('/api/notes/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const note = await prisma.note.findUnique({
+      where: { id },
+      include: { tenant: true, owner: true }
+    });
+
+    if (!note || note.tenant.slug !== req.user.tenant) {
+      return res.status(404).json({ error: "Note not found" });
+    }
+
+    res.json(note);
+  } catch (err) {
+    console.error("❌ Note fetch error:", err.message);
+    res.status(500).json({ error: "failed to fetch note" });
+  }
+});
+
+// Create note (with free plan limit)
 app.post('/api/notes', authMiddleware, async (req, res) => {
   try {
     const { title, content } = req.body;
@@ -134,7 +158,6 @@ app.post('/api/notes', authMiddleware, async (req, res) => {
 
     if (!tenant) return res.status(404).json({ error: "Tenant not found" });
 
-    // ✅ Free Plan Limit
     if (tenant.plan === 'free' && tenant.notes.length >= 3) {
       return res.status(403).json({ error: "Note limit reached. Upgrade to Pro." });
     }
@@ -155,26 +178,45 @@ app.post('/api/notes', authMiddleware, async (req, res) => {
   }
 });
 
+// Update note
 app.put('/api/notes/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const { title, content } = req.body;
 
-    const note = await prisma.note.update({
+    const note = await prisma.note.findUnique({
+      where: { id },
+      include: { tenant: true }
+    });
+    if (!note || note.tenant.slug !== req.user.tenant) {
+      return res.status(404).json({ error: "Note not found" });
+    }
+
+    const updated = await prisma.note.update({
       where: { id },
       data: { title, content }
     });
 
-    res.json(note);
+    res.json(updated);
   } catch (err) {
     console.error("❌ Note update error:", err.message);
     res.status(500).json({ error: "failed to update note" });
   }
 });
 
+// Delete note
 app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
+
+    const note = await prisma.note.findUnique({
+      where: { id },
+      include: { tenant: true }
+    });
+    if (!note || note.tenant.slug !== req.user.tenant) {
+      return res.status(404).json({ error: "Note not found" });
+    }
+
     await prisma.note.delete({ where: { id } });
     res.json({ success: true });
   } catch (err) {
