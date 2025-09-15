@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const prisma = require('./prisma');   // ✅ use shared prisma client
+const prisma = require('./prisma');   // ✅ shared prisma client
 
 const app = express();
 app.use(express.json());
@@ -112,8 +112,10 @@ function authMiddleware(req, res, next) {
 }
 
 /* ------------------------
-   ✅ Example Protected Route (Notes)
+   ✅ Notes CRUD
 ------------------------ */
+
+// Get all notes
 app.get('/api/notes', authMiddleware, async (req, res) => {
   try {
     const notes = await prisma.note.findMany({
@@ -121,8 +123,66 @@ app.get('/api/notes', authMiddleware, async (req, res) => {
     });
     res.json(notes);
   } catch (err) {
-    console.error("❌ Notes error:", err.message);
+    console.error("❌ Notes fetch error:", err.message);
     res.status(500).json({ error: "server error" });
+  }
+});
+
+// Create note
+app.post('/api/notes', authMiddleware, async (req, res) => {
+  try {
+    const { title, content } = req.body;
+    if (!title || !content) {
+      return res.status(400).json({ error: "title and content required" });
+    }
+
+    const note = await prisma.note.create({
+      data: {
+        title,
+        content,
+        userId: req.user.id,
+        tenantId: req.user.tenant
+      }
+    });
+
+    res.json(note);
+  } catch (err) {
+    console.error("❌ Note create error:", err.message);
+    res.status(500).json({ error: "failed to create note" });
+  }
+});
+
+// Update note
+app.put('/api/notes/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, content } = req.body;
+
+    const note = await prisma.note.update({
+      where: { id },
+      data: { title, content }
+    });
+
+    res.json(note);
+  } catch (err) {
+    console.error("❌ Note update error:", err.message);
+    res.status(500).json({ error: "failed to update note" });
+  }
+});
+
+// Delete note
+app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await prisma.note.delete({
+      where: { id }
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ Note delete error:", err.message);
+    res.status(500).json({ error: "failed to delete note" });
   }
 });
 
