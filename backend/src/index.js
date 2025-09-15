@@ -140,12 +140,11 @@ app.post('/api/notes', authMiddleware, async (req, res) => {
       data: {
         title,
         content,
-        userId: req.user.id,
         tenant: {
-          connect: { slug: req.user.tenant }   // ✅ tenant connect
+          connect: { slug: req.user.tenant }   // ✅ Tenant connect
         },
         owner: {
-          connect: { id: req.user.id }         // ✅ owner connect (fix)
+          connect: { id: req.user.id }         // ✅ Owner connect
         }
       }
     });
