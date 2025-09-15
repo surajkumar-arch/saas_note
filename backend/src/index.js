@@ -205,7 +205,7 @@ app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
 ------------------------ */
 app.post('/api/tenants/:slug/upgrade', authMiddleware, async (req, res) => {
   try {
-    if (req.user.role !== 'ADMIN') {
+    if (req.user.role !== 'admin') {
       return res.status(403).json({ error: "Only admins can upgrade tenant plan" });
     }
 
