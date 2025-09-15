@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const prisma = require('./prisma');   // ✅ shared prisma client
+const prisma = require('./prisma');   // shared prisma client
 
 const app = express();
 app.use(express.json());
@@ -59,16 +59,10 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'email and password required' });
     }
 
-    let user;
-    try {
-      user = await prisma.user.findUnique({
-        where: { email },
-        include: { tenant: true }
-      });
-    } catch (dbErr) {
-      console.error("❌ Prisma DB error:", dbErr.message);
-      return res.status(500).json({ error: "database connection failed" });
-    }
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: { tenant: true }
+    });
 
     if (!user) return res.status(401).json({ error: 'invalid credentials' });
 
@@ -87,7 +81,7 @@ app.post('/api/auth/login', async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Login error:", err);
-    res.status(500).json({ error: "server error", details: err.message });
+    res.status(500).json({ error: "server error" });
   }
 });
 
@@ -112,10 +106,8 @@ function authMiddleware(req, res, next) {
 }
 
 /* ------------------------
-   ✅ Notes CRUD with Subscription Gating
+   ✅ Notes CRUD
 ------------------------ */
-
-// Get all notes
 app.get('/api/notes', authMiddleware, async (req, res) => {
   try {
     const notes = await prisma.note.findMany({
@@ -128,7 +120,6 @@ app.get('/api/notes', authMiddleware, async (req, res) => {
   }
 });
 
-// Create note (with free plan limit = 3)
 app.post('/api/notes', authMiddleware, async (req, res) => {
   try {
     const { title, content } = req.body;
@@ -136,7 +127,6 @@ app.post('/api/notes', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: "title and content required" });
     }
 
-    // 🔎 Tenant details (with notes count)
     const tenant = await prisma.tenant.findUnique({
       where: { slug: req.user.tenant },
       include: { notes: true }
@@ -144,17 +134,16 @@ app.post('/api/notes', authMiddleware, async (req, res) => {
 
     if (!tenant) return res.status(404).json({ error: "Tenant not found" });
 
-    // ✅ Free plan limit check
-    if (tenant.plan === "free" && tenant.notes.length >= 3) {
-      return res.status(403).json({ error: "Free plan limit reached (max 3 notes). Please upgrade." });
+    // ✅ Free Plan Limit
+    if (tenant.plan === 'free' && tenant.notes.length >= 3) {
+      return res.status(403).json({ error: "Note limit reached. Upgrade to Pro." });
     }
 
-    // ✅ Create note
     const note = await prisma.note.create({
       data: {
         title,
         content,
-        tenant: { connect: { slug: req.user.tenant } },
+        tenant: { connect: { id: tenant.id } },
         owner: { connect: { id: req.user.id } }
       }
     });
@@ -166,7 +155,6 @@ app.post('/api/notes', authMiddleware, async (req, res) => {
   }
 });
 
-// Update note
 app.put('/api/notes/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
@@ -184,15 +172,10 @@ app.put('/api/notes/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// Delete note
 app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-
-    await prisma.note.delete({
-      where: { id }
-    });
-
+    await prisma.note.delete({ where: { id } });
     res.json({ success: true });
   } catch (err) {
     console.error("❌ Note delete error:", err.message);
@@ -201,25 +184,66 @@ app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
 });
 
 /* ------------------------
-   ✅ Upgrade Endpoint (Admin only)
+   ✅ Upgrade Tenant Plan (Admin Only)
 ------------------------ */
 app.post('/api/tenants/:slug/upgrade', authMiddleware, async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: "Only admins can upgrade tenant plan" });
+    if ((req.user.role || '').toLowerCase() !== 'admin') {
+      return res.status(403).json({ error: 'Only admins can upgrade tenant plan' });
     }
 
     const { slug } = req.params;
-
     const tenant = await prisma.tenant.update({
       where: { slug },
-      data: { plan: "pro" }
+      data: { plan: 'pro' }
     });
 
-    res.json({ success: true, tenant });
+    res.json({ message: "Tenant upgraded to Pro", tenant });
   } catch (err) {
-    console.error("❌ Upgrade error:", err);
+    console.error("❌ Upgrade error:", err.message);
     res.status(500).json({ error: "failed to upgrade tenant" });
+  }
+});
+
+/* ------------------------
+   ✅ Invite User (Admin Only)
+------------------------ */
+app.post('/api/tenants/:slug/invite', authMiddleware, async (req, res) => {
+  try {
+    if ((req.user.role || '').toLowerCase() !== 'admin') {
+      return res.status(403).json({ error: 'Only admins can invite users' });
+    }
+
+    const { slug } = req.params;
+    const { email, role = 'member' } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'email required' });
+    }
+
+    const tenant = await prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) {
+      return res.status(404).json({ error: 'Tenant not found' });
+    }
+
+    const passwordHash = await bcrypt.hash('password', 10);
+
+    const user = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        role: role.toLowerCase(),
+        tenant: { connect: { id: tenant.id } }
+      }
+    });
+
+    res.json({
+      message: 'User invited successfully',
+      user: { id: user.id, email: user.email, role: user.role }
+    });
+  } catch (err) {
+    console.error("❌ Invite error:", err);
+    res.status(500).json({ error: 'failed to invite user' });
   }
 });
 
