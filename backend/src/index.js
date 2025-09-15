@@ -119,7 +119,7 @@ function authMiddleware(req, res, next) {
 app.get('/api/notes', authMiddleware, async (req, res) => {
   try {
     const notes = await prisma.note.findMany({
-      where: { tenantId: req.user.tenant }
+      where: { tenant: { slug: req.user.tenant } }
     });
     res.json(notes);
   } catch (err) {
@@ -141,13 +141,15 @@ app.post('/api/notes', authMiddleware, async (req, res) => {
         title,
         content,
         userId: req.user.id,
-        tenantId: req.user.tenant
+        tenant: {
+          connect: { slug: req.user.tenant }   // ✅ fix relation connect
+        }
       }
     });
 
     res.json(note);
   } catch (err) {
-    console.error("❌ Note create error:", err.message);
+    console.error("❌ Note create error:", err);
     res.status(500).json({ error: "failed to create note" });
   }
 });
