@@ -9,6 +9,10 @@ export default function Dashboard({ token, user, onLogout }) {
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(true);
 
+  // Invite form states
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('member');
+
   const headers = { Authorization: 'Bearer ' + token };
 
   useEffect(() => {
@@ -58,6 +62,22 @@ export default function Dashboard({ token, user, onLogout }) {
     }
   }
 
+  async function inviteUser(e) {
+    e.preventDefault();
+    try {
+      await axios.post(
+        apiBase + '/api/tenants/' + user.tenant + '/invite',
+        { email: inviteEmail, role: inviteRole },
+        { headers }
+      );
+      setInfo('User invited successfully');
+      setInviteEmail('');
+      setInviteRole('member');
+    } catch (err) {
+      setInfo(err.response?.data?.error || 'Invite failed');
+    }
+  }
+
   const freeLimitReached = notes.length >= 3;
 
   // Defensive render: agar user null hai toh crash na ho
@@ -68,6 +88,8 @@ export default function Dashboard({ token, user, onLogout }) {
       </div>
     );
   }
+
+  const isAdmin = user?.role?.toLowerCase() === 'admin';
 
   return (
     <div className="min-h-screen">
@@ -107,7 +129,7 @@ export default function Dashboard({ token, user, onLogout }) {
                 />
                 <div className="flex gap-2">
                   <button className="btn btn-primary">Create</button>
-                  {user?.role === 'admin' && freeLimitReached && (
+                  {isAdmin && freeLimitReached && (
                     <button
                       type="button"
                       className="btn btn-secondary"
@@ -119,6 +141,30 @@ export default function Dashboard({ token, user, onLogout }) {
                 </div>
               </form>
             </div>
+
+            {/* Invite User (Admin only) */}
+            {isAdmin && (
+              <div className="card mb-4">
+                <h3 className="font-semibold mb-2">Invite User</h3>
+                <form onSubmit={inviteUser} className="space-y-2">
+                  <input
+                    className="w-full p-2 border rounded"
+                    placeholder="User email"
+                    value={inviteEmail}
+                    onChange={e => setInviteEmail(e.target.value)}
+                  />
+                  <select
+                    className="w-full p-2 border rounded"
+                    value={inviteRole}
+                    onChange={e => setInviteRole(e.target.value)}
+                  >
+                    <option value="member">Member</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                  <button className="btn btn-primary">Invite</button>
+                </form>
+              </div>
+            )}
 
             {/* Notes list */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -144,7 +190,7 @@ export default function Dashboard({ token, user, onLogout }) {
             </div>
 
             {/* Free plan notice */}
-            {freeLimitReached && user?.role !== 'admin' && (
+            {freeLimitReached && !isAdmin && (
               <div className="mt-4 p-3 bg-yellow-50 border rounded">
                 Free plan limit reached. Ask your admin to upgrade to Pro.
               </div>
