@@ -112,7 +112,7 @@ function authMiddleware(req, res, next) {
 }
 
 /* ------------------------
-   ✅ Notes CRUD
+   ✅ Notes CRUD with Subscription Gating
 ------------------------ */
 
 // Get all notes
@@ -128,7 +128,7 @@ app.get('/api/notes', authMiddleware, async (req, res) => {
   }
 });
 
-// Create note
+// Create note (with free plan limit = 3)
 app.post('/api/notes', authMiddleware, async (req, res) => {
   try {
     const { title, content } = req.body;
@@ -136,16 +136,26 @@ app.post('/api/notes', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: "title and content required" });
     }
 
+    // 🔎 Tenant details (with notes count)
+    const tenant = await prisma.tenant.findUnique({
+      where: { slug: req.user.tenant },
+      include: { notes: true }
+    });
+
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+    // ✅ Free plan limit check
+    if (tenant.plan === "free" && tenant.notes.length >= 3) {
+      return res.status(403).json({ error: "Free plan limit reached (max 3 notes). Please upgrade." });
+    }
+
+    // ✅ Create note
     const note = await prisma.note.create({
       data: {
         title,
         content,
-        tenant: {
-          connect: { slug: req.user.tenant }   // ✅ Tenant connect
-        },
-        owner: {
-          connect: { id: req.user.id }         // ✅ Owner connect
-        }
+        tenant: { connect: { slug: req.user.tenant } },
+        owner: { connect: { id: req.user.id } }
       }
     });
 
@@ -187,6 +197,29 @@ app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("❌ Note delete error:", err.message);
     res.status(500).json({ error: "failed to delete note" });
+  }
+});
+
+/* ------------------------
+   ✅ Upgrade Endpoint (Admin only)
+------------------------ */
+app.post('/api/tenants/:slug/upgrade', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'ADMIN') {
+      return res.status(403).json({ error: "Only admins can upgrade tenant plan" });
+    }
+
+    const { slug } = req.params;
+
+    const tenant = await prisma.tenant.update({
+      where: { slug },
+      data: { plan: "pro" }
+    });
+
+    res.json({ success: true, tenant });
+  } catch (err) {
+    console.error("❌ Upgrade error:", err);
+    res.status(500).json({ error: "failed to upgrade tenant" });
   }
 });
 
